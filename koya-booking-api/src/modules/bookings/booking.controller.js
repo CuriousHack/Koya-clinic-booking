@@ -112,13 +112,33 @@ class BookingController {
 
   async getBookings(req, res, next) {
     try {
-      const { email, status } = req.query;
-      const bookings = await bookingService.listBookings({
-        email,
-        status,
+      const { email, limit: rawLimit, cursor } = req.query;
+
+      // email is required
+      if (!email || typeof email !== 'string' || email.trim() === '') {
+        return res.status(400).json({
+          error: 'email query parameter is required',
+        });
+      }
+
+      // Parse and validate limit (default 10, range 1–50)
+      let limit = 10;
+      if (rawLimit !== undefined) {
+        limit = parseInt(rawLimit, 10);
+        if (!Number.isInteger(limit) || isNaN(limit) || limit < 1 || limit > 50) {
+          return res.status(400).json({
+            error: 'limit must be an integer between 1 and 50',
+          });
+        }
+      }
+
+      const result = await bookingService.listBookingsByEmail({
+        email: email.trim(),
+        limit,
+        cursor: cursor || null,
       });
 
-      return res.status(200).json(bookings);
+      return res.status(200).json(result);
     } catch (error) {
       return next(error);
     }

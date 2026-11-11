@@ -124,7 +124,84 @@ class BookingService {
   }
 
   /**
-   * List bookings with optional filtering
+   * List a user's bookings with cursor-based pagination.
+   *
+   * - Requires email (case-insensitive match).
+   * - Results are ordered oldest first (createdAt ASC, then _id ASC for stability).
+   * - Cursor is base64(createdAt_ISO|_id), encoding the position of the last seen item.
+   * - Returns { bookings, next_cursor } where next_cursor is null on the last page.
+   *
+   * @param {string} email - Required. The patient's email address.
+   * @param {number} limit - Page size, 1–50, default 10.
+   * @param {string|null} cursor - Opaque cursor string from a previous response.
+   */
+  async listBookingsByEmail({ email, limit = 10, cursor = null }) {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // Build the base query
+    const query = { email: normalizedEmail };
+
+    // Apply cursor: fetch records after the cursor position (createdAt ASC, _id ASC)
+    if (cursor) {
+      let cursorCreatedAt, cursorId;
+      try {
+        const decoded = Buffer.from(cursor, 'base64').toString('utf8');
+        const separatorIndex = decoded.lastIndexOf('|');
+        if (separatorIndex === -1) throw new Error('bad format');
+        cursorCreatedAt = decoded.substring(0, separatorIndex);
+        cursorId = decoded.substring(separatorIndex + 1);
+        if (!cursorCreatedAt || !cursorId) throw new Error('empty parts');
+        new Date(cursorCreatedAt); // validate it's a parseable date
+      } catch {
+        const error = new Error('Invalid cursor');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      // "After" condition: (createdAt > cursor.createdAt)
+      //                 OR (createdAt = cursor.createdAt AND _id > cursor._id)
+      query.$or = [
+        { createdAt: { $gt: new Date(cursorCreatedAt) } },
+        {
+          createdAt: { $eq: new Date(cursorCreatedAt) },
+          _id: { $gt: cursorId },
+        },
+      ];
+    }
+
+    // Fetch limit + 1 to determine whether a next page exists
+    const rows = await Booking.find(query)
+      .sort({ createdAt: 1, _id: 1 })
+      .limit(limit + 1)
+      .lean();
+
+    const hasNextPage = rows.length > limit;
+    const bookings = hasNextPage ? rows.slice(0, limit) : rows;
+
+    // Build next_cursor from the last item returned
+    let next_cursor = null;
+    if (hasNextPage) {
+      const last = bookings[bookings.length - 1];
+      const raw = `${new Date(last.createdAt).toISOString()}|${last._id}`;
+      next_cursor = Buffer.from(raw).toString('base64');
+    }
+
+    // Shape the response objects
+    const formatted = bookings.map((b) => ({
+      id: b._id,
+      slot_id: b.slot_id || b.slotId,
+      name: b.name || b.patientName,
+      email: b.email || b.patientEmail,
+      status: b.status,
+      created_at: new Date(b.createdAt).toISOString(),
+    }));
+
+    return { bookings: formatted, next_cursor };
+  }
+
+  /**
+   * @deprecated Use listBookingsByEmail for the public endpoint.
+   * List bookings with optional filtering (internal / admin use)
    */
   async listBookings(filters = {}) {
     const query = {};
