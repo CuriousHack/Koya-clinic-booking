@@ -58,6 +58,9 @@ class SlotService {
       ? new Date(slotData.endTime)
       : new Date(startTime.getTime() + 30 * 60000);
 
+    const status = slotData.status || 'available';
+    const available = slotData.available !== undefined ? slotData.available : (status === 'available');
+
     const slot = new Slot({
       _id: slotId,
       id: slotId,
@@ -68,7 +71,8 @@ class SlotService {
       end: slotData.end || endTime.toISOString(),
       endTime,
       serviceType: slotData.serviceType || 'Consultation',
-      status: slotData.status || 'available',
+      status,
+      available,
     });
 
     return await slot.save();
@@ -112,12 +116,16 @@ class SlotService {
         const slotId = new mongoose.Types.ObjectId().toString();
 
         sampleSlots.push({
+          _id: slotId,
           id: slotId,
+          startTime: slotStart,
+          endTime: slotEnd,
           start: slotStart.toISOString(),
           end: slotEnd.toISOString(),
           provider: doctor.name,
           doctorName: doctor.name,
           serviceType: doctor.service,
+          status: 'available',
           available: true,
         });
       }

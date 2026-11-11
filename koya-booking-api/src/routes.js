@@ -4,6 +4,7 @@ const router = express.Router();
 const resetController = require('./modules/reset/reset.controller');
 const slotController = require('./modules/slots/slot.controller');
 const bookingController = require('./modules/bookings/booking.controller');
+const { bookingRateLimiter } = require('./middleware/rateLimiter');
 
 // Reset endpoint
 router.post('/reset', resetController.reset.bind(resetController));
@@ -14,9 +15,14 @@ router.get('/slots/:id', slotController.getSlotById.bind(slotController));
 router.post('/slots', slotController.createSlot.bind(slotController));
 
 // Booking endpoints
-router.post('/bookings', bookingController.createBooking.bind(bookingController));
+// Level 5: bookingRateLimiter enforces at most 5 attempts per email per minute
+router.post('/bookings', bookingRateLimiter, bookingController.createBooking.bind(bookingController));
 router.get('/bookings/:id', bookingController.getBookingById.bind(bookingController));
 router.get('/bookings', bookingController.getBookings.bind(bookingController));
+
+// Level 3: Booking cancellation
+router.delete('/bookings/:id', bookingController.cancelBooking.bind(bookingController));
+router.post('/bookings/:id/cancel', bookingController.cancelBooking.bind(bookingController));
 
 // Health check endpoint
 router.get('/health', (req, res) => {

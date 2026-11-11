@@ -140,20 +140,33 @@ test('Endpoint /reset: wipes existing data and inserts new slots (allowing past 
   assert.equal(slotsRes.status, 200);
   assert.equal(slotsRes.body.length, 2);
 
+  // 3. Test booking past slot s1 fails with 400 (already started)
+  const pastBookRes = await request(app)
+    .post('/bookings')
+    .set('X-API-Key', API_KEY)
+    .send({
+      slot_id: 's1',
+      name: 'Tunde Bakare',
+      email: 'tunde@example.com',
+    });
+  assert.equal(pastBookRes.status, 400);
+  assert.match(pastBookRes.body.error, /already started/i);
+
+  // 4. Test booking future slot s2 succeeds with 201
   const bookRes = await request(app)
     .post('/bookings')
     .set('X-API-Key', API_KEY)
     .send({
-      slotId: 's1',
-      patientName: 'Tunde Bakare',
-      patientEmail: 'tunde@example.com',
-      patientPhone: '+234-800-0000',
+      slot_id: 's2',
+      name: 'Tunde Bakare',
+      email: 'tunde@example.com',
     });
 
   assert.equal(bookRes.status, 201);
-  assert.equal(bookRes.body.patientName, 'Tunde Bakare');
+  assert.equal(bookRes.body.name, 'Tunde Bakare');
 
-  // Verify s1 is now booked
-  const updatedS1 = await Slot.findById('s1');
-  assert.equal(updatedS1.status, 'booked');
+  // Verify s2 is now booked and available is false
+  const updatedS2 = await Slot.findById('s2');
+  assert.equal(updatedS2.status, 'booked');
+  assert.equal(updatedS2.available, false);
 });

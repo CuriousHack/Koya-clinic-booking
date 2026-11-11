@@ -12,6 +12,24 @@ class ResetService {
     await Booking.deleteMany({});
     await Slot.deleteMany({});
 
+    // Also clear Idempotency collection if exists
+    try {
+      const Idempotency = mongoose.model('Idempotency');
+      if (Idempotency) {
+        await Idempotency.deleteMany({});
+      }
+    } catch (e) {
+      // model might not be registered yet, safe to ignore
+    }
+
+    // Clear in-memory rate limiter attempts
+    try {
+      const { clearAttempts } = require('../../middleware/rateLimiter');
+      if (clearAttempts) clearAttempts();
+    } catch (e) {
+      // safe to ignore
+    }
+
     // 2. Prepare slots to insert
     const slotsToInsert = (Array.isArray(slots) ? slots : []).map((s) => {
       const slotId = s.id || s._id || new mongoose.Types.ObjectId().toString();
@@ -27,13 +45,21 @@ class ResetService {
         ? new Date(s.endTime)
         : new Date(startTime.getTime() + 30 * 60000);
 
+      const status = s.status || 'available';
+      const available = s.available !== undefined ? s.available : (status === 'available');
+
       return {
         _id: slotId,
         id: slotId,
+        provider,
         doctorName: provider,
         start: s.start || startTime.toISOString(),
+        startTime,
         end: s.end || endTime.toISOString(),
-        available: true,
+        endTime,
+        serviceType: s.serviceType || 'Consultation',
+        status,
+        available,
       };
     });
 
