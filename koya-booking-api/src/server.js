@@ -18,10 +18,10 @@ async function startServer() {
 
     server = app.listen(PORT, () => {
       console.log(`[Server] Clinic Booking API running on port ${PORT}`);
-      console.log(`[Server] Health check: http://localhost:${PORT}/health`);
-      console.log(`[Server] Reset endpoint: http://localhost:${PORT}/reset`);
-      console.log(`[Server] Slots endpoint: http://localhost:${PORT}/slots`);
-      console.log(`[Server] Bookings endpoint: http://localhost:${PORT}/bookings`);
+      console.log(`[Server] Health check: http://localhost:${PORT}/api/health`);
+      console.log(`[Server] Reset endpoint: http://localhost:${PORT}/api/reset`);
+      console.log(`[Server] Slots endpoint: http://localhost:${PORT}/api/slots`);
+      console.log(`[Server] Bookings endpoint: http://localhost:${PORT}/api/bookings`);
     });
   } catch (error) {
     console.error(`[Server] Failed to start server:`, error.message);

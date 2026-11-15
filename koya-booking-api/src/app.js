@@ -14,8 +14,7 @@ app.use(express.json());
 // Global API Key authentication for all incoming requests
 app.use(apiKeyAuth);
 
-// Link all routes (accessible directly or via /api prefix)
-app.use('/', routes);
+// Link all routes (accessible via /api prefix)
 app.use('/api', routes);
 
 // Error Handling Middleware

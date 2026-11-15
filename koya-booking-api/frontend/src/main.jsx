@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || 'http://localhost:5000/api';
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
 async function request(path, options = {}, apiKey = '') {
   const response = await fetch(`${apiBaseUrl.replace(/\/+$/, '')}${path}`, {
     ...options,
