@@ -1,106 +1,174 @@
-# Koya Clinic Booking API
+# Koya Clinic Booking
 
-A modular monolith RESTful booking API built with Node.js, Express, and MongoDB.
+A clinic appointment booking application with a REST API and a separate web frontend. The API is built with Node.js, Express, and MongoDB. The frontend uses React, Vite, and Tailwind CSS.
 
-## Architecture
+## Project structure
 
-This project follows a **modular monolith** architecture with clean separation of concerns:
-- **Global Authentication Middleware (`apiKeyAuth.js`)**: Validates the `X-API-Key` header on every request against `.env`; allows five failed key attempts per client IP in a rolling 15-minute window, then returns `429` with `Retry-After`.
-- **Rate Limiting Middleware (`rateLimiter.js`)**: Enforces at most 5 attempts per email per minute (Level 5).
-- **Idempotency Service (`idempotency.service.js`)**: Manages `Idempotency-Key` deduplication and payload validation (Level 4).
-- **Routes Layer (`routes.js`)**: Centralizes route declarations and links to controllers.
-- **Controller Layer**: Handles HTTP request parsing, input extraction, and standard JSON response formatting.
-- **Service Layer**: Encapsulates business logic, database queries, and atomic state transitions.
-- **Model / Data Access Layer**: Mongoose schemas and data persistence.
-
-```
+```text
 koya-booking-api/
-├── .env                                # Environment variables (contains X-API-Key reference)
-├── .env.example
-├── .gitignore
-├── package.json
-├── README.md
-├── routes.js                           # Root alias linking to src/routes.js
-├── src/
-│   ├── app.js                          # Express app configuration & global middleware
-│   ├── routes.js                       # Centralized REST routing table
-│   ├── server.js                       # Server startup & graceful shutdown
-│   ├── config/
-│   │   ├── db.js                       # Mongoose connection & lifecycle
-│   │   └── env.js                      # Environment configuration & X-API-Key cross-reference
-│   ├── modules/
-│   │   ├── reset/                      # Reset module
-│   │   │   ├── reset.service.js        # Wipe DB & insert batch slots
-│   │   │   └── reset.controller.js     # Reset request handler
-│   │   ├── slots/                      # Slots domain module
-│   │   │   ├── slot.model.js           # Slot schema (status, available, provider, start, end)
-│   │   │   ├── slot.service.js         # Slot query & lifecycle methods
-│   │   │   └── slot.controller.js      # Slot HTTP handlers
-│   │   ├── bookings/                   # Bookings domain module
-│   │   │   ├── booking.model.js        # Booking schema (slot_id, name, email, status)
-│   │   │   ├── booking.service.js      # Booking business logic (concurrency, cancellation)
-│   │   │   └── booking.controller.js   # Booking HTTP handlers (Level 1-4 validations)
-│   │   └── idempotency/                # Idempotency domain module (Level 4)
-│   │       ├── idempotency.model.js    # Idempotency record schema & TTL
-│   │       └── idempotency.service.js  # Deduplication and body hash checks
-│   └── middleware/
-│       ├── apiKeyAuth.js               # Global X-API-Key authentication middleware
-│       ├── rateLimiter.js              # Level 5 per-email rate limiter
-│       ├── errorHandler.js             # Standard error formatter {"error": "<message>"}
-│       └── notFound.js                 # 404 handler
-└── test/
-    ├── level1.test.js                  # Integration tests for basic slot/booking & auth
-    ├── levels_1_to_5.test.js           # Full specification tests for Levels 1, 2, 3, 4, 5
-    └── reset.test.js                   # Tests for /reset & X-API-Key authorization
+├── src/                  # Express API
+│   ├── config/            # Environment and MongoDB configuration
+│   ├── middleware/        # API key authentication and booking rate limit
+│   └── modules/           # Slots, bookings, reset, idempotency
+├── frontend/              # React/Vite/Tailwind client
+├── test/                  # API integration tests
+├── .env.example           # Backend environment template
+└── package.json           # Backend scripts and dependencies
 ```
 
----
+## Requirements
 
-## Levels Overview & Rules
+- Node.js and npm
+- MongoDB, running locally or available through a MongoDB connection URI
 
-### Level 1: Booking Confirmation & Slot State Transition
-- Returns `201 Created` with the booking object, `status: "confirmed"`.
-- Updates the slot: `status: "booked"`, `available: false`.
+## Run locally
 
-### Level 2: Strict Input Validation & Timing Rules
-- **400 Bad Request:** If `slot_id`, `name`, or `email` is missing or empty.
-- **400 Bad Request:** If the `email` format is invalid.
-- **400 Bad Request:** If the slot has already started (`startTime <= Date.now()`).
-- **404 Not Found:** If the slot does not exist.
-- Trims whitespace from `name` and `email`, and stores `email` in lowercase.
+### 1. Configure and start the API
 
-### Level 3: Concurrency Control & Cancellation
-- **409 Conflict:** If a slot already has a confirmed booking.
-- **Concurrency Guarantee:** Atomic conditional update (`findOneAndUpdate` matching `{ status: 'available', available: true }`) ensures that if multiple requests arrive simultaneously for the same slot, exactly ONE succeeds (201) and all others receive 409.
-- **Cancellation:** `DELETE /bookings/:id` or `POST /bookings/:id/cancel` sets booking `status: "cancelled"` and restores slot `status: "available"`, `available: true`.
+From the repository root, copy `.env.example` to `.env` and set the values for your environment. In PowerShell:
 
-### Level 4: Idempotency Key Handling
-- Supports optional `Idempotency-Key` header.
-- **Same Key + Same Body:** Returns the exact same response (same status code, same booking ID) without creating duplicate bookings.
-- **Same Key + Different Body:** Returns **`422 Unprocessable Entity`**.
+```powershell
+Copy-Item .env.example .env
+```
 
-### Level 5: Per-Email Rate Limiting
-- Enforces **at most 5 attempts per email per minute** (failed attempts included).
-- On the 6th attempt within the minute: returns **`429 Too Many Requests`** with a **`Retry-After: <seconds>`** header in whole seconds.
-- Isolated per email; other emails are unaffected.
+The template uses a local MongoDB database and a development API key. The API accepts `X-API-Key`, `X_API_KEY`, or `API_KEY`; `X-API-Key` has priority when more than one is set.
 
----
+Install backend dependencies and start the server:
 
-## API Endpoints
+```sh
+npm install
+npm run dev
+```
 
-### API key attempt limit
+The API listens on port `5000` by default. On first startup, it creates sample appointment slots if the slots collection is empty. Set `PORT` in `.env` to use another port.
 
-The API allows five missing or invalid `X-API-Key` attempts per client IP in any 15-minute window. The next failed attempt returns `429 Too Many Requests` with a `Retry-After` header. A successful key clears that IP's failed-attempt count. This limits key guessing without restricting authorized booking activity. The counter is in memory and resets when the API process restarts. If the API runs behind a reverse proxy, configure Express `trust proxy` for the trusted proxy so `req.ip` identifies the visitor rather than the proxy.
+### 2. Configure and start the frontend
 
-| Method | Endpoint | Headers | Description |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/reset` | `X-API-Key` | Wipes existing data, resets rate limiter/idempotency, inserts payload slots |
-| `GET` | `/slots` | `X-API-Key` | List available slots (or `?status=all`) |
-| `GET` | `/slots/:id` | `X-API-Key` | Look up a slot by ID |
-| `POST` | `/slots` | `X-API-Key` | Create an appointment slot |
-| `POST` | `/bookings` | `X-API-Key`, `[Idempotency-Key]` | Book an appointment slot |
-| `GET` | `/bookings/:id` | `X-API-Key` | Look up a booking by ID |
-| `GET` | `/bookings` | `X-API-Key` | List bookings (supports `?email=...`) |
-| `DELETE` | `/bookings/:id` | `X-API-Key` | Cancel a booking and re-open the slot |
-| `POST` | `/bookings/:id/cancel` | `X-API-Key` | Cancel a booking and re-open the slot |
-| `GET` | `/health` | `X-API-Key` | Service health check |
+Open a second terminal and run:
+
+```sh
+cd frontend
+npm install
+```
+
+Copy `frontend/.env.example` to `frontend/.env` and set the API URL. The default is `http://localhost:5000/api`.
+
+PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Start the client:
+
+```sh
+npm run dev
+```
+
+Open the local URL printed by Vite. The API supports both `/api/...` and root-level routes, and its CORS middleware permits browser requests from the Vite development server.
+
+## Frontend behavior
+
+- Visitors enter an API key before the booking interface becomes accessible. The client checks the key with `GET /health`.
+- The key stays in browser memory for that page session. It is not saved in frontend environment variables, local storage, or cookies. Reloading the page asks for the key again.
+- After successful connection, the client shows a short welcome transition and locks the connection setting for the rest of the page session.
+- The frontend lists and filters available appointment slots, books appointments, looks up a patient's bookings by email, and supports cancellation.
+- A booking retry with unchanged details reuses its idempotency key. Editing the slot or patient details starts a new booking attempt with a new key.
+- `VITE_API_BASE_URL` configures the API address. Do not put a private API key in a `VITE_*` variable; Vite bundles those values into browser code.
+
+The visitor-provided API key is sent by the browser with API requests. This connection screen is not a substitute for user accounts or a server-side proxy when protecting production data. The backend currently uses one shared API key for all clients.
+
+## API authentication and limits
+
+All routes require the `X-API-Key` header, including `/health`:
+
+```http
+X-API-Key: YOUR_API_KEY
+```
+
+There are two separate limits:
+
+- **API key attempts:** five missing or invalid keys per client IP in a rolling 15-minute window. The next failed attempt returns `429 Too Many Requests` and a `Retry-After` header. A valid key clears the IP's failed-attempt count. This in-memory counter resets when the API process restarts.
+- **Booking attempts:** at most five booking attempts per email in one minute. Failed booking attempts count too. The sixth attempt returns `429` with `Retry-After`.
+
+The API uses Express `req.ip` to identify the client. If deployed behind a reverse proxy, configure Express `trust proxy` for the known proxy so rate limits use visitor IPs. Avoid trusting arbitrary forwarded headers.
+
+## API routes
+
+Routes are available with or without the `/api` prefix. For example, `GET /slots` and `GET /api/slots` are equivalent.
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/health` | API health and uptime |
+| `GET` | `/slots` | List available slots by default; supports `?status=all` and `?provider=...` |
+| `GET` | `/slots/:id` | Look up a slot |
+| `POST` | `/slots` | Create a slot |
+| `POST` | `/bookings` | Book an available slot; optional `Idempotency-Key` header |
+| `GET` | `/bookings?email=...` | List bookings for an email; supports `limit` (1–50) and `cursor` |
+| `GET` | `/bookings/:id` | Look up a booking |
+| `DELETE` | `/bookings/:id` | Cancel a booking and reopen its slot |
+| `POST` | `/bookings/:id/cancel` | Alternative cancellation route |
+| `POST` | `/reset` | Delete all bookings and slots, then insert supplied slots |
+
+### Book an appointment
+
+Send the slot ID, patient name, and email. Slot start and end values are ISO 8601 date-time strings when creating slots.
+
+```sh
+curl -X POST http://localhost:5000/api/bookings \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -H "Idempotency-Key: a-unique-request-id" \
+  -d '{"slot_id":"SLOT_ID","name":"Jane Doe","email":"jane@example.com"}'
+```
+
+A successful booking returns `201 Created` with a confirmed booking. The slot is then marked unavailable. Only one confirmed booking can hold a slot at a time; a competing request receives `409 Conflict`. Repeating the same request with the same idempotency key returns the original response. Reusing that key with a different body returns `422`.
+
+### List bookings
+
+Email is required. The response contains a `bookings` array and a `next_cursor` value for pagination. Each booking includes its scheduled slot start, end, and provider when the slot is available in the database.
+
+```sh
+curl "http://localhost:5000/api/bookings?email=jane%40example.com&limit=10" \
+  -H "X-API-Key: YOUR_API_KEY"
+```
+
+### Create a slot
+
+```sh
+curl -X POST http://localhost:5000/api/slots \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -d '{"provider":"Dr. Sarah Connor","start":"2030-05-10T09:00:00.000Z","end":"2030-05-10T09:45:00.000Z"}'
+```
+
+### Reset data
+
+`POST /reset` is destructive: it deletes every booking and slot before inserting the provided `slots` array. Use it only when resetting a development database.
+
+```json
+{
+  "slots": [
+    {
+      "provider": "Dr. Sarah Connor",
+      "start": "2030-05-10T09:00:00.000Z",
+      "end": "2030-05-10T09:45:00.000Z"
+    }
+  ]
+}
+```
+
+## Tests
+
+Run the backend integration tests with:
+
+```sh
+npm test
+```
+
+## Troubleshooting
+
+- **401 from the API:** check the backend key in `.env` and enter the same value in the frontend connection screen.
+- **429 while entering a key:** wait for the number of seconds in `Retry-After` before trying again.
+- **No available slots:** `GET /slots` returns only available slots by default. Check that future slots exist, or use `GET /slots?status=all` to inspect all slot states.
+- **Frontend cannot reach the API:** check `VITE_API_BASE_URL`, restart Vite after changing `.env`, and make sure the backend is running.

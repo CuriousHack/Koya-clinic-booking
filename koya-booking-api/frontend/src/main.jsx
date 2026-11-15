@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 
@@ -54,6 +54,7 @@ function App() {
   const [authError, setAuthError] = useState(''), [authBusy, setAuthBusy] = useState(false);
   const [welcomeVisible, setWelcomeVisible] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(true), [toast, setToast] = useState(null);
+  const pendingBookingRef = useRef(null);
   const notify = (message, error = false) => { setToast({ message, error }); window.setTimeout(() => setToast(null), 3500); };
   async function loadSlots(key = apiKey) {
     setLoading(true); setSlotsError('');
@@ -96,11 +97,29 @@ function App() {
   async function book(event) {
     event.preventDefault(); setBookingBusy(true); setBookingMessage('');
     const fields = new FormData(event.currentTarget), patientEmail = String(fields.get('email')).trim();
+    const payload = {
+      slot_id: bookingSlot.id || bookingSlot._id,
+      name: String(fields.get('name')).trim(),
+      email: patientEmail,
+    };
+    const payloadSignature = JSON.stringify(payload);
+    if (!pendingBookingRef.current || pendingBookingRef.current.payloadSignature !== payloadSignature) {
+      pendingBookingRef.current = { payloadSignature, key: crypto.randomUUID() };
+    }
+    const idempotencyKey = pendingBookingRef.current.key;
     try {
-      const result = await request('/bookings', { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() }, body: JSON.stringify({ slot_id: bookingSlot.id || bookingSlot._id, name: fields.get('name'), email: patientEmail }) }, apiKey);
+      const result = await request('/bookings', { method: 'POST', headers: { 'Idempotency-Key': idempotencyKey }, body: JSON.stringify(payload) }, apiKey);
+      pendingBookingRef.current = null;
       setBookingMessage('Booking confirmed. Your reference is ' + (result.id || result._id || 'confirmed') + '.'); setBookingSuccess(true); setEmail(patientEmail); notify('Appointment confirmed. See you soon!');
       await loadSlots(); await loadAppointments(patientEmail, false);
-    } catch (error) { const message = error.status === 429 ? 'Too many booking attempts. Try again in ' + (error.retryAfter || 'a') + ' seconds.' : error.message; setBookingMessage(message); notify(message, true); }
+    } catch (error) {
+      const message = error.status === 429
+        ? 'Too many booking attempts. Try again in ' + (error.retryAfter || 'a') + ' seconds. Retrying this same booking will reuse its request key.'
+        : error.status
+          ? error.message
+          : 'We could not confirm whether the booking completed. Retry the same details to safely check again.';
+      setBookingMessage(message); notify(message, true);
+    }
     finally { setBookingBusy(false); }
   }
   async function confirmCancellation() {
