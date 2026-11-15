@@ -15,3 +15,8 @@ button, input { font: inherit; }
 button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid #b9d28e; outline-offset: 3px; }
 .animate-spin-soft { animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes welcome-splash {
+  0% { opacity: 0; transform: translateY(10px) scale(.97); }
+  18%, 72% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-8px) scale(1.02); }
+}
