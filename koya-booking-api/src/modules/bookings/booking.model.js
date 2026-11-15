@@ -14,6 +14,12 @@ const bookingSchema = new mongoose.Schema(
       type: String,
       ref: 'Slot',
     },
+    // Persist the API's snake_case alias because the unique booking constraint
+    // is defined on this field. Keep it in sync with slotId before validation.
+    slot_id: {
+      type: String,
+      ref: 'Slot',
+    },
     name: {
       type: String,
       required: [true, 'name is required'],

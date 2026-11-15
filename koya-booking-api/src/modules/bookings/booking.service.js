@@ -103,7 +103,7 @@ class BookingService {
 
     // Re-open the slot
     await Slot.updateOne(
-      { _id: booking.slot_id },
+      { _id: booking.slot_id || booking.slotId },
       { $set: { status: 'available', available: true } }
     );
 
@@ -182,15 +182,29 @@ class BookingService {
       next_cursor = Buffer.from(raw).toString('base64');
     }
 
-    // Shape the response objects
-    const formatted = bookings.map((b) => ({
-      // id: b._id,
-      // slot_id: b.slot_id || b.slotId,
-      name: b.name || b.patientName,
-      email: b.email || b.patientEmail,
-      status: b.status,
-      created_at: new Date(b.createdAt).toISOString(),
-    }));
+    // Attach the scheduled slot details so the patient can see their visit time.
+    const slotIds = bookings.map((booking) => booking.slot_id || booking.slotId).filter(Boolean);
+    const slots = await Slot.find({ _id: { $in: slotIds } })
+      .select('provider start end')
+      .lean();
+    const slotsById = new Map(slots.map((slot) => [String(slot._id), slot]));
+
+    const formatted = bookings.map((booking) => {
+      const slotId = booking.slot_id || booking.slotId;
+      const slot = slotId ? slotsById.get(String(slotId)) : null;
+
+      return {
+        id: booking._id,
+        slot_id: slotId || null,
+        name: booking.name || booking.patientName,
+        email: booking.email || booking.patientEmail,
+        status: booking.status,
+        created_at: new Date(booking.createdAt).toISOString(),
+        provider: slot?.provider || null,
+        start: slot?.start || null,
+        end: slot?.end || null,
+      };
+    });
 
     return { bookings: formatted, next_cursor };
   }
