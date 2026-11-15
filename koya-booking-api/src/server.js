@@ -8,6 +8,10 @@ let server;
 
 async function startServer() {
   try {
+    if (!API_KEY) {
+      throw new Error('API key is not configured. Set API_KEY in the API service environment before starting the server.');
+    }
+
     await connectDB(MONGODB_URI);
 
     // Auto-seed sample slots if collection is empty
@@ -18,8 +22,7 @@ async function startServer() {
 
     server = app.listen(PORT, () => {
       console.log(`[Server] Clinic Booking API running on port ${PORT}`);
-      if (API_KEY) console.log(`[Server] API key loaded from ${API_KEY_SOURCE}`);
-      else console.error('[Server] API key is not configured; authenticated requests will return 503');
+      console.log(`[Server] API key loaded from ${API_KEY_SOURCE}`);
       console.log(`[Server] Health check: http://localhost:${PORT}/api/health`);
       console.log(`[Server] Reset endpoint: http://localhost:${PORT}/api/reset`);
       console.log(`[Server] Slots endpoint: http://localhost:${PORT}/api/slots`);
