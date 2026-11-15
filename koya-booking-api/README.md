@@ -5,7 +5,7 @@ A modular monolith RESTful booking API built with Node.js, Express, and MongoDB.
 ## Architecture
 
 This project follows a **modular monolith** architecture with clean separation of concerns:
-- **Global Authentication Middleware (`apiKeyAuth.js`)**: Validates the `X-API-Key` header on every request against `.env`.
+- **Global Authentication Middleware (`apiKeyAuth.js`)**: Validates the `X-API-Key` header on every request against `.env`; allows five failed key attempts per client IP in a rolling 15-minute window, then returns `429` with `Retry-After`.
 - **Rate Limiting Middleware (`rateLimiter.js`)**: Enforces at most 5 attempts per email per minute (Level 5).
 - **Idempotency Service (`idempotency.service.js`)**: Manages `Idempotency-Key` deduplication and payload validation (Level 4).
 - **Routes Layer (`routes.js`)**: Centralizes route declarations and links to controllers.
@@ -87,6 +87,10 @@ koya-booking-api/
 ---
 
 ## API Endpoints
+
+### API key attempt limit
+
+The API allows five missing or invalid `X-API-Key` attempts per client IP in any 15-minute window. The next failed attempt returns `429 Too Many Requests` with a `Retry-After` header. A successful key clears that IP's failed-attempt count. This limits key guessing without restricting authorized booking activity. The counter is in memory and resets when the API process restarts. If the API runs behind a reverse proxy, configure Express `trust proxy` for the trusted proxy so `req.ip` identifies the visitor rather than the proxy.
 
 | Method | Endpoint | Headers | Description |
 | :--- | :--- | :--- | :--- |
