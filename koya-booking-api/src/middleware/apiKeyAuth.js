@@ -25,7 +25,7 @@ function rejectAttempt(req, res, message) {
 
 function apiKeyAuth(req, res, next) {
   const apiKey = req.headers['x-api-key'] || req.header('x-api-key');
-  const validKey = process.env['X-API-Key'] || process.env.X_API_KEY || API_KEY || 'koya-api-key';
+  const validKey = process.env['X-API-Key'] || process.env.X_API_KEY || API_KEY;
 
   if (!apiKey) {
     return rejectAttempt(req, res, 'Missing X-API-Key header');
