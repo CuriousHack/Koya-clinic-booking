@@ -6,7 +6,7 @@ class BookingService {
   /**
    * Validates and books an available slot with concurrency control.
    */
-  async createBooking({ slot_id, name, email, reason }) {
+  async createBooking({ slot_id, name, email }) {
     // 1. Look up slot (Level 2: 404 if the slot doesn't exist)
     const slot = await Slot.findOne({
       $or: [{ _id: slot_id }, { id: slot_id }],
@@ -19,7 +19,7 @@ class BookingService {
     }
 
     // 2. Level 2: 400 if the slot has already started
-    const slotStartTime = new Date(slot.startTime || slot.start);
+    const slotStartTime = new Date(slot.start);
     if (slotStartTime.getTime() <= Date.now()) {
       const error = new Error('Cannot book a slot that has already started');
       error.statusCode = 400;
@@ -52,14 +52,10 @@ class BookingService {
     // 4. Create confirmed booking record
     const bookingId = new mongoose.Types.ObjectId().toString();
     const booking = new Booking({
-      _id: bookingId,
       id: bookingId,
-      slot_id: slot._id,
       slotId: slot._id,
       name,
-      patientName: name,
       email,
-      patientEmail: email,
       status: 'confirmed',
     });
 
@@ -188,8 +184,8 @@ class BookingService {
 
     // Shape the response objects
     const formatted = bookings.map((b) => ({
-      id: b._id,
-      slot_id: b.slot_id || b.slotId,
+      // id: b._id,
+      // slot_id: b.slot_id || b.slotId,
       name: b.name || b.patientName,
       email: b.email || b.patientEmail,
       status: b.status,

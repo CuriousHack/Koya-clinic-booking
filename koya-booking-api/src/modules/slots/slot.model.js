@@ -6,91 +6,74 @@ const slotSchema = new mongoose.Schema(
       type: String,
       default: () => new mongoose.Types.ObjectId().toString(),
     },
-    id: {
-      type: String,
-      index: true,
-    },
     provider: {
       type: String,
+      required: [true, 'provider is required'],
       trim: true,
-      default: 'General Practitioner',
-    },
-    doctorName: {
-      type: String,
-      trim: true,
-      default: 'General Practitioner',
     },
     start: {
       type: String,
-    },
-    startTime: {
-      type: Date,
-      required: [true, 'Slot start time is required'],
+      required: [true, 'start is required'],
     },
     end: {
       type: String,
+      required: [true, 'end is required'],
     },
-    endTime: {
-      type: Date,
-      required: [true, 'Slot end time is required'],
-    },
-    serviceType: {
-      type: String,
-      trim: true,
-      default: 'Consultation',
+    available: {
+      type: Boolean,
+      default: true,
     },
     status: {
       type: String,
       enum: ['available', 'booked', 'cancelled'],
       default: 'available',
-      index: true,
-    },
-    available: {
-      type: Boolean,
-      default: true,
-      index: true,
     },
   },
   {
     timestamps: true,
-    toJSON: {
-      transform: function (doc, ret) {
-        ret.id = ret._id || ret.id;
-        ret.provider = ret.provider || ret.doctorName;
-        ret.doctorName = ret.doctorName || ret.provider;
-        ret.start = ret.start || (ret.startTime ? new Date(ret.startTime).toISOString() : undefined);
-        ret.end = ret.end || (ret.endTime ? new Date(ret.endTime).toISOString() : undefined);
-        ret.available = ret.available !== undefined ? ret.available : (ret.status === 'available');
-        delete ret.__v;
-        return ret;
-      },
-    },
-    toObject: {
-      transform: function (doc, ret) {
-        ret.id = ret._id || ret.id;
-        ret.provider = ret.provider || ret.doctorName;
-        ret.doctorName = ret.doctorName || ret.provider;
-        ret.start = ret.start || (ret.startTime ? new Date(ret.startTime).toISOString() : undefined);
-        ret.end = ret.end || (ret.endTime ? new Date(ret.endTime).toISOString() : undefined);
-        ret.available = ret.available !== undefined ? ret.available : (ret.status === 'available');
-        delete ret.__v;
-        return ret;
-      },
-    },
   }
 );
 
-// Synchronize status and available before validation
+// Keep available and status in sync before saving
 slotSchema.pre('validate', function () {
   if (this.status === 'booked' || this.status === 'cancelled') {
     this.available = false;
-  } else if (this.available === false && this.status === 'available') {
+  } else if (this.available === false) {
     this.status = 'booked';
   }
 });
 
-// Indexes
-slotSchema.index({ status: 1, startTime: 1 });
+// Indexes for filtering and sorting
+slotSchema.index({ status: 1 });
+slotSchema.index({ available: 1 });
+slotSchema.index({ start: 1 });
+
+// Output only the five public fields (+ optional status)
+slotSchema.set('toJSON', {
+  transform(doc, ret) {
+    return {
+      id:        ret._id,
+      provider:  ret.provider,
+      start:     ret.start,
+      end:       ret.end,
+      available: ret.available,
+      status:    ret.status,
+    };
+  },
+});
+
+slotSchema.set('toObject', {
+  transform(doc, ret) {
+    return {
+      id:        ret._id,
+      provider:  ret.provider,
+      start:     ret.start,
+      end:       ret.end,
+      available: ret.available,
+      status:    ret.status,
+    };
+  },
+});
 
 const Slot = mongoose.model('Slot', slotSchema);
 

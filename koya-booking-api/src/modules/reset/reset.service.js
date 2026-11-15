@@ -1,74 +1,51 @@
 const mongoose = require('mongoose');
-const Slot = require('../slots/slot.model');
+const Slot    = require('../slots/slot.model');
 const Booking = require('../bookings/booking.model');
 
 class ResetService {
   /**
-   * Wipes/deletes all existing bookings and slots,
-   * then inserts the new slots provided in the payload (allowing past dates).
+   * Wipes all existing bookings, slots, and idempotency records,
+   * then inserts the new slots supplied in the payload.
+   * Past-dated slots are accepted without restriction.
    */
   async resetDatabase(slots = []) {
-    // 1. Wipe/delete all existing bookings and slots from database
     await Booking.deleteMany({});
     await Slot.deleteMany({});
 
-    // Also clear Idempotency collection if exists
     try {
       const Idempotency = mongoose.model('Idempotency');
-      if (Idempotency) {
-        await Idempotency.deleteMany({});
-      }
-    } catch (e) {
-      // model might not be registered yet, safe to ignore
+      await Idempotency.deleteMany({});
+    } catch (_) {
+      // model not yet registered — safe to ignore
     }
 
-    // Clear in-memory rate limiter attempts
     try {
       const { clearAttempts } = require('../../middleware/rateLimiter');
-      if (clearAttempts) clearAttempts();
-    } catch (e) {
+      clearAttempts();
+    } catch (_) {
       // safe to ignore
     }
 
-    // 2. Prepare slots to insert
-    const slotsToInsert = (Array.isArray(slots) ? slots : []).map((s) => {
+    const toInsert = (Array.isArray(slots) ? slots : []).map((s) => {
       const slotId = s.id || s._id || new mongoose.Types.ObjectId().toString();
-      const provider = s.provider || s.doctorName || 'General Practitioner';
-      const startTime = s.start
-        ? new Date(s.start)
-        : s.startTime
-        ? new Date(s.startTime)
-        : new Date();
-      const endTime = s.end
-        ? new Date(s.end)
-        : s.endTime
-        ? new Date(s.endTime)
-        : new Date(startTime.getTime() + 30 * 60000);
-
+      const start  = s.start;
+      const end    = s.end || new Date(new Date(start).getTime() + 30 * 60000).toISOString();
       const status = s.status || 'available';
       const available = s.available !== undefined ? s.available : (status === 'available');
 
       return {
         _id: slotId,
-        id: slotId,
-        provider,
-        doctorName: provider,
-        start: s.start || startTime.toISOString(),
-        startTime,
-        end: s.end || endTime.toISOString(),
-        endTime,
-        serviceType: s.serviceType || 'Consultation',
+        provider: s.provider,
+        start,
+        end,
         status,
         available,
       };
     });
 
-    let insertedSlots = [];
-    if (slotsToInsert.length > 0) {
-      insertedSlots = await Slot.insertMany(slotsToInsert);
-    }
+    if (toInsert.length === 0) return [];
 
-    return insertedSlots;
+    return await Slot.insertMany(toInsert);
   }
 }
 

@@ -61,8 +61,7 @@ class BookingController {
       const booking = await bookingService.createBooking({
         slot_id,
         name,
-        email,
-        reason: req.body?.reason,
+        email
       });
 
       const responseData = booking.toJSON ? booking.toJSON() : booking;

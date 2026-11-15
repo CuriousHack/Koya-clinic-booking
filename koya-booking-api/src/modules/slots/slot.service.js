@@ -3,8 +3,9 @@ const Slot = require('./slot.model');
 
 class SlotService {
   /**
-   * List slots with optional filtering.
-   * Default: returns available slots sorted by startTime ascending.
+   * List slots.
+   * Default: available slots sorted by start (ISO string) ascending.
+   * Pass status=all to return every slot.
    */
   async listSlots(filters = {}) {
     const query = {};
@@ -15,62 +16,36 @@ class SlotService {
       query.status = 'available';
     }
 
-    if (filters.doctorName || filters.provider) {
-      const search = filters.doctorName || filters.provider;
-      query.$or = [
-        { doctorName: new RegExp(search, 'i') },
-        { provider: new RegExp(search, 'i') },
-      ];
+    if (filters.provider) {
+      query.provider = new RegExp(filters.provider, 'i');
     }
 
-    if (filters.from || filters.to) {
-      query.startTime = {};
-      if (filters.from) query.startTime.$gte = new Date(filters.from);
-      if (filters.to) query.startTime.$lte = new Date(filters.to);
-    }
-
-    return await Slot.find(query).sort({ startTime: 1 });
+    return await Slot.find(query).sort({ start: 1 });
   }
 
   /**
-   * Get a single slot by ID (supports string ID, ObjectId, or custom id).
+   * Get a single slot by its _id.
    */
   async getSlotById(slotId) {
-    return await Slot.findOne({
-      $or: [{ _id: slotId }, { id: slotId }],
-    });
+    return await Slot.findById(slotId);
   }
 
   /**
-   * Create a new slot.
+   * Create a slot from a plain object.
+   * Accepts: id, provider, start, end, available, status.
    */
-  async createSlot(slotData) {
-    const slotId = slotData.id || slotData._id || new mongoose.Types.ObjectId().toString();
-    const provider = slotData.provider || slotData.doctorName || 'General Practitioner';
-    const startTime = slotData.start
-      ? new Date(slotData.start)
-      : slotData.startTime
-      ? new Date(slotData.startTime)
-      : new Date();
-    const endTime = slotData.end
-      ? new Date(slotData.end)
-      : slotData.endTime
-      ? new Date(slotData.endTime)
-      : new Date(startTime.getTime() + 30 * 60000);
-
-    const status = slotData.status || 'available';
-    const available = slotData.available !== undefined ? slotData.available : (status === 'available');
+  async createSlot(data) {
+    const slotId = data.id || data._id || new mongoose.Types.ObjectId().toString();
+    const start  = data.start;
+    const end    = data.end || new Date(new Date(start).getTime() + 30 * 60000).toISOString();
+    const status = data.status || 'available';
+    const available = data.available !== undefined ? data.available : (status === 'available');
 
     const slot = new Slot({
       _id: slotId,
-      id: slotId,
-      provider,
-      doctorName: provider,
-      start: slotData.start || startTime.toISOString(),
-      startTime,
-      end: slotData.end || endTime.toISOString(),
-      endTime,
-      serviceType: slotData.serviceType || 'Consultation',
+      provider: data.provider,
+      start,
+      end,
       status,
       available,
     });
@@ -79,59 +54,41 @@ class SlotService {
   }
 
   /**
-   * Create multiple slots.
-   */
-  async createManySlots(slotsData) {
-    return await Slot.insertMany(slotsData);
-  }
-
-  /**
-   * Seed initial sample slots if none exist.
+   * Seed sample slots on first boot (collection empty).
    */
   async seedInitialSlotsIfEmpty() {
     const count = await Slot.countDocuments();
     if (count > 0) return [];
 
     const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(9, 0, 0, 0);
+    const base = new Date(now);
+    base.setDate(base.getDate() + 1);
+    base.setHours(9, 0, 0, 0);
 
-    const sampleSlots = [];
-    const doctors = [
-      { name: 'Dr. Sarah Connor', service: 'General Consultation' },
-      { name: 'Dr. Marcus Vance', service: 'Dental Checkup' },
-    ];
+    const providers = ['Dr. Sarah Connor', 'Dr. Marcus Vance'];
+    const seeds = [];
 
-    for (let dayOffset = 0; dayOffset < 3; dayOffset++) {
-      for (let hour = 9; hour < 14; hour += 1) {
-        const slotStart = new Date(tomorrow);
-        slotStart.setDate(slotStart.getDate() + dayOffset);
+    for (let day = 0; day < 3; day++) {
+      for (let hour = 9; hour < 14; hour++) {
+        const slotStart = new Date(base);
+        slotStart.setDate(slotStart.getDate() + day);
         slotStart.setHours(hour, 0, 0, 0);
 
-        const slotEnd = new Date(slotStart);
-        slotEnd.setMinutes(slotEnd.getMinutes() + 45);
+        const slotEnd = new Date(slotStart.getTime() + 45 * 60000);
+        const slotId  = new mongoose.Types.ObjectId().toString();
 
-        const doctor = doctors[hour % doctors.length];
-        const slotId = new mongoose.Types.ObjectId().toString();
-
-        sampleSlots.push({
-          _id: slotId,
-          id: slotId,
-          startTime: slotStart,
-          endTime: slotEnd,
-          start: slotStart.toISOString(),
-          end: slotEnd.toISOString(),
-          provider: doctor.name,
-          doctorName: doctor.name,
-          serviceType: doctor.service,
-          status: 'available',
+        seeds.push({
+          _id:       slotId,
+          provider:  providers[hour % providers.length],
+          start:     slotStart.toISOString(),
+          end:       slotEnd.toISOString(),
+          status:    'available',
           available: true,
         });
       }
     }
 
-    return await Slot.insertMany(sampleSlots);
+    return await Slot.insertMany(seeds);
   }
 }
 

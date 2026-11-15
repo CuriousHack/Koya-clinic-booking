@@ -10,12 +10,6 @@ const bookingSchema = new mongoose.Schema(
       type: String,
       index: true,
     },
-    slot_id: {
-      type: String,
-      ref: 'Slot',
-      required: [true, 'slot_id is required'],
-      index: true,
-    },
     slotId: {
       type: String,
       ref: 'Slot',
@@ -25,30 +19,11 @@ const bookingSchema = new mongoose.Schema(
       required: [true, 'name is required'],
       trim: true,
     },
-    patientName: {
-      type: String,
-      trim: true,
-    },
     email: {
       type: String,
       required: [true, 'email is required'],
       trim: true,
       lowercase: true,
-    },
-    patientEmail: {
-      type: String,
-      trim: true,
-      lowercase: true,
-    },
-    patientPhone: {
-      type: String,
-      trim: true,
-      default: '',
-    },
-    reason: {
-      type: String,
-      trim: true,
-      default: '',
     },
     status: {
       type: String,
