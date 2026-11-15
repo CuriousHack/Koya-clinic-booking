@@ -1,6 +1,6 @@
 const app = require('./app');
 const routes = require('./routes');
-const { PORT, MONGODB_URI } = require('./config/env');
+const { PORT, MONGODB_URI, API_KEY, API_KEY_SOURCE } = require('./config/env');
 const { connectDB, disconnectDB } = require('./config/db');
 const slotService = require('./modules/slots/slot.service');
 
@@ -18,6 +18,8 @@ async function startServer() {
 
     server = app.listen(PORT, () => {
       console.log(`[Server] Clinic Booking API running on port ${PORT}`);
+      if (API_KEY) console.log(`[Server] API key loaded from ${API_KEY_SOURCE}`);
+      else console.error('[Server] API key is not configured; authenticated requests will return 503');
       console.log(`[Server] Health check: http://localhost:${PORT}/api/health`);
       console.log(`[Server] Reset endpoint: http://localhost:${PORT}/api/reset`);
       console.log(`[Server] Slots endpoint: http://localhost:${PORT}/api/slots`);

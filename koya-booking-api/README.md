@@ -31,7 +31,7 @@ From the repository root, copy `.env.example` to `.env` and set the values for y
 Copy-Item .env.example .env
 ```
 
-The template uses a local MongoDB database and a development API key. The API accepts `X-API-Key`, `X_API_KEY`, or `API_KEY`; `X-API-Key` has priority when more than one is set.
+The template uses a local MongoDB database and a development API key. Set `API_KEY` in production. The backend also accepts `X_API_KEY` and `X-API-Key` for compatibility, but values must agree if you define more than one alias. Platform environment variables take precedence over the project `.env` file. The server logs which variable supplied the key without logging the key itself.
 
 Install backend dependencies and start the server:
 

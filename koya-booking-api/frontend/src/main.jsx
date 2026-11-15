@@ -4,6 +4,9 @@ import './index.css';
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
 async function request(path, options = {}, apiKey = '') {
+  if (!apiBaseUrl) {
+    throw new Error('Frontend is missing VITE_API_BASE_URL. Set it before building and redeploy the frontend.');
+  }
   const response = await fetch(`${apiBaseUrl.replace(/\/+$/, '')}${path}`, {
     ...options,
     headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey, ...(options.headers || {}) },
@@ -87,7 +90,7 @@ function App() {
     } catch (error) {
       setConnected(false);
       const message = error.status === 401
-        ? 'That API key is not valid. Check it and try again.'
+        ? 'The API at the configured URL rejected this key. Confirm the frontend points to the intended backend and that the backend’s configured key matches.'
         : error.status === 429
           ? 'Too many incorrect API key attempts. Try again in ' + (error.retryAfter || 'a few') + ' seconds.'
           : `Could not connect to the API. ${error.message}`;

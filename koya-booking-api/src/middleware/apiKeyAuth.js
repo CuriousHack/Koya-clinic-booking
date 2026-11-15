@@ -1,4 +1,5 @@
 const { API_KEY } = require('../config/env');
+const { timingSafeEqual } = require('crypto');
 
 const MAX_FAILED_ATTEMPTS = 5;
 const WINDOW_MS = 15 * 60 * 1000;
@@ -24,14 +25,22 @@ function rejectAttempt(req, res, message) {
 }
 
 function apiKeyAuth(req, res, next) {
-  const apiKey = req.headers['x-api-key'] || req.header('x-api-key');
-  const validKey = process.env['X-API-Key'] || process.env.X_API_KEY || API_KEY;
+  if (!API_KEY) {
+    return res.status(503).json({ error: 'API key is not configured on the server' });
+  }
+
+  const apiKey = (req.get('x-api-key') || '').trim();
 
   if (!apiKey) {
     return rejectAttempt(req, res, 'Missing X-API-Key header');
   }
 
-  if (apiKey !== validKey) {
+  const providedKeyBuffer = Buffer.from(apiKey);
+  const configuredKeyBuffer = Buffer.from(API_KEY);
+  const matches = providedKeyBuffer.length === configuredKeyBuffer.length
+    && timingSafeEqual(providedKeyBuffer, configuredKeyBuffer);
+
+  if (!matches) {
     return rejectAttempt(req, res, 'Invalid X-API-Key header');
   }
 
